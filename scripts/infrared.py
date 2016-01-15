@@ -1,6 +1,7 @@
 #!/usr/bin/env python
+import rospy
+from std_msgs.msg import Float32
 import Adafruit_BBIO.ADC as ADC
-
 
 class IR():
     @staticmethod
@@ -31,4 +32,20 @@ class IR():
 
     @staticmethod
     def get_value(pin):
-        return IR.median([ADC.read(pin) for i in range(3)])
+        return IR.median([ADC.read(pin) for i in range(5)])
+
+if __name__ == '__main__':
+    rospy.init_node('infrared_publisher')
+
+    left_pub = rospy.Publisher('/sensors/ir_left', Float32, queue_size=1)
+    right_pub = rospy.Publisher('/sensors/ir_right', Float32, queue_size=1)
+    front_pub = rospy.Publisher('/sensors/ir_front', Float32, queue_size=1)
+
+    IR.setup()
+
+    r = rospy.Rate(30)
+    while not rospy.is_shutdown():
+        left_pub.publish(Float32(IR.get_left()))
+        right_pub.publish(Float32(IR.get_right()))
+        front_pub.publish(Float32(IR.get_front()))
+        r.sleep()

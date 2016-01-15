@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import rospy
+from std_msgs.msg import Float32
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from pid import PID
 from math import pi, atan2
-from infrared import IR
 from tf import transformations
 from time import sleep
 
@@ -17,8 +17,6 @@ class controller(object):
         self.left_wall_pid.setpoint = 0.055
         self.right_wall_pid.setpoint = 0.055
 
-        IR.setup()
-
         self.goal_angle = None
         self.goal_distance = None
 
@@ -26,6 +24,10 @@ class controller(object):
         self.position = None
         self.start_angle = None
         self.angle = None
+
+        self.left_dist = 0
+        self.right_dist = 0
+        self.front_dist = 0
 
         self.commands = []
 
@@ -35,6 +37,18 @@ class controller(object):
 
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         rospy.Subscriber("/wheel_odom", Odometry, self.update)
+        rospy.Subscriber("/sensors/ir_left", Float32, self.ir_left)
+        rospy.Subscriber("/sensors/ir_right", Float32, self.ir_right)
+        rospy.Subscriber("/sensors/ir_front", Float32, self.ir_front)
+
+    def ir_left(self, data):
+        self.left_dist = data.data
+
+    def ir_right(self, data):
+        self.right_dist = data.data
+
+    def ir_front(self, data):
+        self.front_dist = data.data
 
     def update(self, odom):
         # populate current state variables
@@ -58,13 +72,11 @@ class controller(object):
         if self.goal_distance != None:
             # heading correction
 
-            left_dist = IR.get_left()
-            if left_dist > 0.03 and left_dist < 0.08:
-                angular_vel -= self.left_wall_pid.calc(left_dist)
+            if self.left_dist > 0.03 and self.left_dist < 0.08:
+                angular_vel -= self.left_wall_pid.calc(self.left_dist)
 
-            right_dist = IR.get_right()
-            if right_dist > 0.03 and right_dist < 0.08:
-                angular_vel += self.right_wall_pid.calc(right_dist)
+            if self.right_dist > 0.03 and self.right_dist < 0.08:
+                angular_vel += self.right_wall_pid.calc(self.right_dist)
 
             # vroom
             offset = abs(self.goal_distance) - dist(self.position.x, self.position.y, self.start_position.x, self.start_position.y)
@@ -77,11 +89,9 @@ class controller(object):
 
             # absolute position correction via front IR
             if offset > 0.08 and offset < 0.18:
-                front_dist = IR.get_front()
-                error = front_dist - offset - 0.015
+                error = self.front_dist - offset - 0.015
                 if abs(error) < 0.06:
                     self.goal_distance += error
-                    print(error)
 
         if self.goal_angle != None:
             offset = wrap_angle(self.goal_angle - self.angle)
@@ -145,17 +155,12 @@ def signum(n):
         return -1
     return 0
 
-
 if __name__ == '__main__':
     rospy.init_node('controller')
     c = controller()
     sleep(2)
     c.straight(0.18 * 2)
-    c.turn(- pi / 2)
-    c.straight(0.18 * 1)
-    c.turn(- pi / 2)
-    c.straight(0.18 * 1)
     # c.straight(0.18)
-    # c.turn(pi / 2)
-    # c.straight(0.18)
+    c.turn(- pi / 2)
+    c.straight(0.18)
     rospy.spin()
