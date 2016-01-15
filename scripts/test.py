@@ -6,14 +6,21 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger
 from tf import transformations
+from infrared import IR
 import numpy as np
 
-# super sketchy
+# this is super super sketchy
 
 goal_theta = None
 goal_x = None
 goal_y = None
+goal_dist = None
+pivot_x = None
+pivot_y = None
+pivot_angle = None
+prev_pivot_offset = None
 first = True
+angle_repair = False
 def update_velocity(odom):
     # get absolute angular position
     q = odom.pose.pose.orientation
@@ -24,11 +31,21 @@ def update_velocity(odom):
     global first
     global goal_x
     global goal_y
+    global goal_dist
+    global pivot_x
+    global pivot_y
+    global pivot_angle
+    global prev_pivot_offset
+    global angle_repair
     if first:
-        # goal_theta = theta + pi / 2
-        goal_x = position.x + cos(theta) * 2
-        goal_y = position.y + sin(theta) * 2
-        first = False
+        goal_theta = theta + pi
+        # first = False
+        # goal_dist = 0.18
+        # pivot_angle = theta
+        # pivot_x = position.x
+        # pivot_y = position.y
+        # goal_x = position.x + cos(theta) * goal_dist
+        # goal_y = position.y + sin(theta) * goal_dist
         return
 
     angular_velocity = odom.twist.twist.angular.z
@@ -37,7 +54,14 @@ def update_velocity(odom):
     new_angular_velocity = 0
     new_linear_velocity = 0
 
-    if goal_theta != None:
+    if angle_repair:
+        offset = IR.get_left() - IR.get_right()
+        print(offset)
+        if abs(offset) < 0.1 and abs(angular_velocity) < 0.2:
+            angle_repair = False
+        else:
+            new_angular_velocity = signum(offset) * angular_jerk * 1.1
+    elif goal_theta != None:
         offset = wrap_angle(goal_theta - theta)
 
         if abs(offset) < 0.01:
@@ -65,11 +89,21 @@ def update_velocity(odom):
 
         if distance > 0.05:
             new_angular_velocity = angular_offset * 5
+        
+        if distance > 0.1:
+            ir_offset = IR.get_left() - IR.get_right()
+            if abs(ir_offset) > 0.1 and abs(ir_offset) < 3:
+                pivot_angle += ir_offset / 400
+                if prev_pivot_offset != None:
+                    pivot_angle += (ir_offset - prev_pivot_offset) / 50
+                goal_x = pivot_x + cos(pivot_angle) * goal_dist
+                goal_y = pivot_y + sin(pivot_angle) * goal_dist
+            prev_pivot_offset = ir_offset
 
         if distance < 0.02 and abs(odom.twist.twist.linear.x) < 0.02:
             goal_x = None
             goal_y = None
-            goal_theta = None
+            goal_theta = pivot_angle
 
         if abs(wrap_angle(desired_theta - theta)) > pi / 2:
             new_linear_velocity = -min(distance * 5, target_linear_velocity)
@@ -110,6 +144,8 @@ linear_jerk = 0.04
 target_angular_velocity = 10
 angular_accel = 2
 angular_jerk = 2
+
+IR.setup()
 
 rospy.init_node('turn')
 rospy.Subscriber("/wheel_odom", Odometry, update_velocity)
