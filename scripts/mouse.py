@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+import rospy
 from Queue import PriorityQueue
 from LiveRun import LiveRun
 from SimRun import SimRun
@@ -200,7 +202,8 @@ class Mouse():
 
     """ Floodfill algorithm """
     def floodFillToGoal(self):
-        while(not self.inGoal()):
+        print "doing a star search"
+        while not self.inGoal() and not rospy.is_shutdown():
             self.path = self.AStarSearch()
             self.followPath()
             # will follow path to completion if walls appropriate
@@ -210,7 +213,7 @@ class Mouse():
     Keeps moving mouse to through path. Returns if path completed or walls are updated
     """
     def followPath(self):
-        while(self.path):
+        while(self.path) and not rospy.is_shutdown():
             path = self.path[0]
             moveSuccess = self.moveToSquare(path[0], path[1])
             if moveSuccess:
@@ -222,15 +225,16 @@ class Mouse():
     
     """ Moves to an adjacent square """
     def moveToSquare(self, x, y):
-        if self.pause:
-            print "movetoSquare " + str((x,y))
-            print "current situation in " + str((self.x, self.y))
-            print "existing " +  str(self.board.boundaries[self.x][self.y]) + " actual " +str(self.action.omniscientBoard.boundaries[self.x][self.y])
-            command = raw_input("press n to continue")
-            if command == "q":
-                exit()
+
+        print "movetoSquare " + str((x,y))
+        print "current situation in " + str((self.x, self.y))
+            # print "existing " +  str(self.board.boundaries[self.x][self.y]) + " actual " +str(self.action.omniscientBoard.boundaries[self.x][self.y])
+            # command = raw_input("press n to continue")
+            # if command == "q":
+              #  exit()
 
         turn = 1
+        print self.printBoard()
         if (x,y) == self.leftCoordinates() and (self.board.boundaries[self.x][self.y][(self.direction + 3)%4]==0):
             print "left turning!!"
             turn = self.turnLeft()
@@ -248,8 +252,8 @@ class Mouse():
             # print self.forwardCoordinates()
             # means it is behind
             turn = all((self.turnRight(), self.turnRight()))
-        print "board realization: " + str(self.board.boundaries[x][y]) + " " + str(self.action.omniscientBoard.boundaries[x][y])+ "  " + str(x) + " " + str(y)
-        print self.printBoard()
+        # print "board realization: " + str(self.board.boundaries[x][y]) + " " + str(self.action.omniscientBoard.boundaries[x][y])+ "  " + str(x) + " " + str(y)
+        # print self.printBoard()
         return turn and self.move() #returns 1 if move is successful, 0 if move if move unexpected
 
     

@@ -1,14 +1,20 @@
+#!/usr/bin/env python
 from controller import Controller
 from math import pi
+from time import sleep
 class LiveRun():
     def __init__(self, mouse):
         self.mouse = mouse
         self.controller = Controller()
+        print("XXXXXXSSADJKLSDJKASJDKLAJSKLDJALKS")
+        sleep(1)
         self.DIAGONAL_DISTANCE_MAX = 0.1
 
     def move(self):
         coordTuple = self.mouse.forwardCoordinates()
         wallsAsExpected = all((self.mouse.detectFrontWall(), self.mouse.detectFrontLeftWall(), self.mouse.detectFrontRightWall()))
+        if not wallsAsExpected:
+            return False
         if not self.mouse.facingWall() and self.mouse.inBounds(coordTuple[0], coordTuple[1]):
             (self.mouse.x, self.mouse.y) = self.mouse.forwardCoordinates()
             self.controller.straight(0.18)
@@ -28,17 +34,25 @@ class LiveRun():
         # MAKE SURE TO UPDATE self.mouse.x and self.mouse.y when moving appropriately
         # return -1
 
-    def wait():
+    def wait(self):
         count = 0
         while not self.controller.busy and count < 5:
             count += 1
             sleep(0.2)
+            if count >= 5:
+                print "hmmmmmmmmmnnnnggghhh"
+
+        count = 0
         while self.controller.busy:
             sleep(0.2)
+            count += 1
+            if count > 40:
+                print "this is taking longer than expected"
 
     def turnRight(self):
         self.controller.turn(-pi/2)
         self.wait()
+        self.mouse.direction = (self.mouse.direction + 1) % 4
         return 1
         # decrease speed appropriately for turn
         # MAKE SURE TO UPDATE self.mouse.direction
@@ -47,6 +61,7 @@ class LiveRun():
     def turnLeft(self):
         self.controller.turn(pi/2)
         self.wait()
+        self.mouse.direction = (self.mouse.direction + 3) % 4
         return 1
         # decrease speed appropriately for turn
         # MAKE SURE TO UPDATE self.mouse.direction
@@ -63,7 +78,7 @@ class LiveRun():
     def detectFrontRightWall(self):
         direction = (1 + self.mouse.direction)%4
         frontCoord = self.mouse.forwardCoordinates()
-        hasRealWall = self.controller.right_dist > self.DIAGONAL_DISTANCE_MAX
+        hasRealWall = self.controller.right_dist < self.DIAGONAL_DISTANCE_MAX
         wallExpected = hasRealWall == self.mouse.board.boundaries[frontCoord[0]][frontCoord[1]][direction]
         self.mouse.board.boundaries[frontCoord[0]][frontCoord[1]][direction] = hasRealWall
         return wallExpected
@@ -71,7 +86,7 @@ class LiveRun():
         # hasWall = -1 # 1 or 0, set detection to check
         # forwardCoord = self.mouse.forwardCoordinates()
         # if(hasWall != self.mouse.boundaries[forwardCoord[0]][forwardCoord[1]][self.mouse.direction]):
-            somehow update self.mouse.boundaries to reflect appropriate changes
+            # somehow update self.mouse.boundaries to reflect appropriate changes
 # 
             # return -1
         # else:
@@ -81,7 +96,7 @@ class LiveRun():
     def detectFrontLeftWall(self):
         direction = (3 + self.mouse.direction)%4
         frontCoord = self.mouse.forwardCoordinates()
-        hasRealWall = self.controller.left_dist > self.DIAGONAL_DISTANCE_MAX
+        hasRealWall = self.controller.left_dist < self.DIAGONAL_DISTANCE_MAX
         wallExpected = hasRealWall == self.mouse.board.boundaries[frontCoord[0]][frontCoord[1]][direction]
         self.mouse.board.boundaries[frontCoord[0]][frontCoord[1]][direction] = hasRealWall
 
@@ -92,15 +107,76 @@ class LiveRun():
         
         direction = (0 + self.mouse.direction)%4
         frontCoord = self.mouse.forwardCoordinates()
-        hasRealWall = self.controller.front_dist > .15 and self.controller.first_dist < .23
+        hasRealWall = self.controller.front_dist > .15 and self.controller.front_dist < .23
+        print str(self.controller.front_dist) + " distance from wall"
         wallExpected = hasRealWall == self.mouse.board.boundaries[frontCoord[0]][frontCoord[1]][direction]
         self.mouse.board.boundaries[frontCoord[0]][frontCoord[1]][direction] = hasRealWall
         return wallExpected
 
+    def printBoard(self):
 
+        line = "||"
+        self.omniscientBoard = self.mouse.board
+        for x in range(self.mouse.board.sideLength):
+            if self.omniscientBoard.boundaries[x][0][1]:
+                if self.mouse.board.boundaries[x][0][1]:
+                    line += "===|"
+                else:
+                    line += "===%"
+            else:
+                line += "===="
+        line = line + "|\n"
+        for y in range(self.mouse.board.sideLength):
+            for row in range(2):
+                line += "||"
+                for x in range(self.mouse.board.sideLength):
+                    initial = ["   ", " "]
+                    # should only print according to what is on bottom and right, since adding left
+                    # and top is redundant with multiple boxes printed together.
+                    box = self.mouse.board.boundaries[x][y]
+                    omniscientBox = self.omniscientBoard.boundaries[x][y]
+                    # print str(box) + " printing!!!! " + str(omniscientBox) + " " + str(box == omniscientBox)
+                    if omniscientBox[1]:
+                        if box[1]:
+                            initial[1] = "|"
+                        else:
+                            initial[1] = "%"
+                    if x in (7,8) and y in (7,8):
+                        initial[0] = "GGG"
+                        if(x == self.mouse.x and y == self.mouse.y):
+                            initial[0] = "G{0}G".format(self.mouse.printDirection())
+                        if x == 7:
+                            initial[1] = "G" #override possiblity of vertical wall inside goal area
+                    elif row == 0: 
+                        if(x == self.mouse.x and y == self.mouse.y):
+                            initial[0] = " {0} ".format(self.mouse.printDirection())
+                        elif (x,y) in self.mouse.saved_path:
+                            initial[0] = " * "
+                    elif row == 1:
+                        if omniscientBox[2]:
+                            if box[2]:
+                                if y == self.mouse.board.sideLength -1:
+                                    initial[0] = "==="
+                                    initial[1] = "="
+                                else:
+                                    initial[0]= "---"
+                                    initial[1] = "-"
+                            else:
+                                if(y == self.mouse.board.sideLength -1):
+                                    initial[0] = "%%%"
+                                    initial[1] = "%"
+                                else:
+                                    initial[0]= "%%%"
+                                    initial[1] = "%"
 
-    
+                        if omniscientBox[1]:
+                            if box[1] == omniscientBox[1]:
+                                initial[1] = "|"
+                            else:
+                                initial[1] = "%"
 
-
+                    line += "".join(initial)
+                line +="|\n"
+        return line
 
 

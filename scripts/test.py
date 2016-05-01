@@ -1,127 +1,146 @@
 #!/usr/bin/env python
 import rospy
-from math import pi, cos, sin, atan2
-from std_msgs.msg import Float64
+from std_msgs.msg import Float32
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from std_srvs.srv import Trigger
+from pid import PID
+from math import pi, atan2
 from tf import transformations
-from infrared import IR
-import numpy as np
+from time import sleep
 
-# this is super super sketchy
+# sketchy mouse controller
 
-goal_theta = None
-goal_x = None
-goal_y = None
-goal_dist = None
-pivot_x = None
-pivot_y = None
-pivot_angle = None
-prev_pivot_offset = None
-first = True
-angle_repair = False
-def update_velocity(odom):
-    # get absolute angular position
-    q = odom.pose.pose.orientation
-    theta = transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
-    position = odom.pose.pose.position
+class Controller(object):
+    def __init__(self):
+        self.left_wall_pid = PID(14, 2, 0.5)
+        self.right_wall_pid = PID(14, 2, 0.5)
+        self.left_wall_pid.setpoint = 0.055
+        self.right_wall_pid.setpoint = 0.055
 
-    global goal_theta
-    global first
-    global goal_x
-    global goal_y
-    global goal_dist
-    global pivot_x
-    global pivot_y
-    global pivot_angle
-    global prev_pivot_offset
-    global angle_repair
-    if first:
-        goal_theta = theta + pi
-        # first = False
-        # goal_dist = 0.18
-        # pivot_angle = theta
-        # pivot_x = position.x
-        # pivot_y = position.y
-        # goal_x = position.x + cos(theta) * goal_dist
-        # goal_y = position.y + sin(theta) * goal_dist
-        return
+        self.goal_angle = None
+        self.goal_distance = None
 
-    angular_velocity = odom.twist.twist.angular.z
+        self.start_position = None
+        self.position = None
+        self.start_angle = None
+        self.angle = None
 
-    cmd_vel = Twist()
-    new_angular_velocity = 0
-    new_linear_velocity = 0
+        self.left_dist = 0
+        self.right_dist = 0
+        self.front_dist = 0
 
-    if angle_repair:
-        offset = IR.get_left() - IR.get_right()
-        print(offset)
-        if abs(offset) < 0.1 and abs(angular_velocity) < 0.2:
-            angle_repair = False
-        else:
-            new_angular_velocity = signum(offset) * angular_jerk * 1.1
-    elif goal_theta != None:
-        offset = wrap_angle(goal_theta - theta)
+        self.commands = []
 
-        if abs(offset) < 0.01:
-            goal_theta = None
+        self.busy = False
 
-        print(goal_theta, theta, offset)
+        self.callback = None
 
-        turn_dir = signum(offset)
+        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        rospy.Subscriber("/wheel_odom", Odometry, self.update)
+        rospy.Subscriber("/sensors/ir_left", Float32, self.ir_left)
+        rospy.Subscriber("/sensors/ir_right", Float32, self.ir_right)
+        rospy.Subscriber("/sensors/ir_front", Float32, self.ir_front)
 
-        new_angular_velocity = angular_velocity + angular_accel * turn_dir;
+    def ir_left(self, data):
+        print("ASJKFLAJKFSLJAKSHELLOOOOOOOOOOOOOOOOOO")
+        self.left_dist = data.data
 
-        if signum(new_angular_velocity) == turn_dir:
-            if abs(new_angular_velocity) < angular_jerk:
-                new_angular_velocity = angular_jerk * turn_dir
-            elif abs(new_angular_velocity) > target_angular_velocity:
-                new_angular_velocity = target_angular_velocity * turn_dir
-            cap = abs(offset * 8)
-            if abs(new_angular_velocity) > cap:
-                new_angular_velocity = max(angular_jerk, cap) * turn_dir
-    elif goal_x != None and goal_y != None:
-        desired_theta = atan2(goal_y - position.y, goal_x - position.x)
-        angular_offset = wrap_angle(desired_theta - theta, 2)
+    def ir_right(self, data):
+        self.right_dist = data.data
 
-        distance = dist(position.x, position.y, goal_x, goal_y)
+    def ir_front(self, data):
+        self.front_dist = data.data
 
-        if distance > 0.05:
-            new_angular_velocity = angular_offset * 5
-        
-        if distance > 0.1:
-            ir_offset = IR.get_left() - IR.get_right()
-            if abs(ir_offset) > 0.1 and abs(ir_offset) < 3:
-                pivot_angle += ir_offset / 400
-                if prev_pivot_offset != None:
-                    pivot_angle += (ir_offset - prev_pivot_offset) / 50
-                goal_x = pivot_x + cos(pivot_angle) * goal_dist
-                goal_y = pivot_y + sin(pivot_angle) * goal_dist
-            prev_pivot_offset = ir_offset
+    def update(self, odom):
+        # populate current state variables
+        pose = odom.pose.pose
+        twist = odom.twist.twist
+        q = pose.orientation
+        self.angle = transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
+        self.position = pose.position
 
-        if distance < 0.02 and abs(odom.twist.twist.linear.x) < 0.02:
-            goal_x = None
-            goal_y = None
-            goal_theta = pivot_angle
+        if not self.busy and self.commands:
+            data = self.commands.pop(0)
+            data[0]()
+            self.callback = data[1]
+            print("Starting action: " + data[2])
+            self.busy = True
 
-        if abs(wrap_angle(desired_theta - theta)) > pi / 2:
-            new_linear_velocity = -min(distance * 5, target_linear_velocity)
-        else:
-            new_linear_velocity = min(distance * 5, target_linear_velocity)
-        print(distance, angular_offset)
+        # traverse if needed
+        cmd_vel = Twist()
+        linear_vel = 0
+        angular_vel = 0
+        if self.goal_distance != None:
+            # heading correction
 
-    cmd_vel.linear.x = new_linear_velocity
-    cmd_vel.angular.z = new_angular_velocity
-    cmd_pub.publish(cmd_vel)
+            if self.left_dist > 0.03 and self.left_dist < 0.08:
+                angular_vel -= self.left_wall_pid.calc(self.left_dist)
+
+            if self.right_dist > 0.03 and self.right_dist < 0.08:
+                angular_vel += self.right_wall_pid.calc(self.right_dist)
+
+            # vroom
+            offset = abs(self.goal_distance) - dist(self.position.x, self.position.y, self.start_position.x, self.start_position.y)
+            if abs(offset) < 0.01 and abs(twist.linear.x) < 0.01:
+                self.goal_distance = None
+            elif abs(offset) < 0.05:
+                linear_vel = signum(offset) * 0.12
+            else:
+                linear_vel = signum(offset) * 0.18
+
+            # absolute position correction via front IR
+            if offset > 0.08 and offset < 0.18:
+                error = self.front_dist - offset - 0.015
+                if abs(error) < 0.06:
+                    self.goal_distance += error
+
+        if self.goal_angle != None:
+            offset = wrap_angle(self.goal_angle - self.angle)
+            # print(offset)
+            if abs(offset) < 0.06 and abs(twist.angular.z) < 0.2 and signum(offset) == -signum(twist.angular.z):
+                self.goal_angle = None
+            elif abs(offset) < 0.05:
+                angular_vel = signum(offset) * 1.5
+            elif abs(offset) < 0.2:
+                angular_vel = signum(offset) * 2.5
+            else:
+                angular_vel = signum(offset) * 5
+
+        if self.busy and self.goal_angle == None and self.goal_distance == None:
+            self.busy = False
+            print('DONE')
+            linear_vel = 0
+            angular_vel = 0
+            self.callback and self.callback()
+
+        cmd_vel.linear.x = linear_vel
+        cmd_vel.angular.z = angular_vel
+        self.cmd_vel_pub.publish(cmd_vel)
+
+    def turn(self, angle, cb=None):
+        def f():
+            self.goal_angle = wrap_angle(self.angle + angle)
+        self.commands.append((f, cb, 'turn by ' + str(angle)))
+
+    def turnTo(self, angle, cb=None):
+        def f():
+            self.goal_angle = wrap_angle(angle)
+        self.commands.append((f, cb, 'turn to ' + str(angle)))
+
+    def straight(self, dist, cb=None):
+        def f():
+            self.start_position = self.position
+            self.start_angle = self.angle
+            self.goal_distance = dist
+        def c():
+            theta = atan2(self.position.y - self.start_position.y, self.position.x - self.start_position.x)
+            self.goal_angle = theta
+            self.busy = True
+            self.callback = cb
+        self.commands.append((f, c, 'move ' + str(dist * 100) + 'cm'))
 
 def dist(x1, y1, x2, y2):
     return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
-
-def cap_speed(velocity):
-    if velocity > target_angular_velocity * signum(velocity):
-        return target_angular_velocity * signum(velocity)
-    return velocity
 
 def wrap_angle(offset, x = 1):
     while offset > pi / x:
@@ -137,18 +156,12 @@ def signum(n):
         return -1
     return 0
 
-target_linear_velocity = 0.2
-linear_accel = 0.04
-linear_jerk = 0.04
-
-target_angular_velocity = 10
-angular_accel = 2
-angular_jerk = 2
-
-IR.setup()
-
-rospy.init_node('turn')
-rospy.Subscriber("/wheel_odom", Odometry, update_velocity)
-cmd_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-
-rospy.spin()
+if __name__ == '__main__':
+    rospy.init_node('controller')
+    c = Controller()
+    sleep(2)
+    c.straight(0.18 * 2)
+    # c.straight(0.18)
+    # c.turn(- pi / 2)
+    # c.straight(0.18)
+    rospy.spin()

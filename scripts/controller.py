@@ -10,7 +10,7 @@ from time import sleep
 
 # sketchy mouse controller
 
-class controller(object):
+class Controller(object):
     def __init__(self):
         self.left_wall_pid = PID(14, 2, 0.5)
         self.right_wall_pid = PID(14, 2, 0.5)
@@ -77,15 +77,14 @@ class controller(object):
 
             if self.right_dist > 0.03 and self.right_dist < 0.08:
                 angular_vel += self.right_wall_pid.calc(self.right_dist)
-
             # vroom
             offset = abs(self.goal_distance) - dist(self.position.x, self.position.y, self.start_position.x, self.start_position.y)
             if abs(offset) < 0.01 and abs(twist.linear.x) < 0.01:
                 self.goal_distance = None
             elif abs(offset) < 0.05:
-                linear_vel = signum(offset) * 0.12
+                linear_vel = signum(offset) * max(0, 0.15 - abs(angular_vel) / 10)
             else:
-                linear_vel = signum(offset) * 0.18
+                linear_vel = signum(offset) * max(0, 0.2 - abs(angular_vel) / 10)
 
             # absolute position correction via front IR
             if offset > 0.08 and offset < 0.18:
@@ -99,9 +98,9 @@ class controller(object):
             if abs(offset) < 0.06 and abs(twist.angular.z) < 0.2 and signum(offset) == -signum(twist.angular.z):
                 self.goal_angle = None
             elif abs(offset) < 0.05:
-                angular_vel = signum(offset) * 2.25
+                angular_vel = signum(offset) * 1.5
             elif abs(offset) < 0.2:
-                angular_vel = signum(offset) * 3.5
+                angular_vel = signum(offset) * 2.5
             else:
                 angular_vel = signum(offset) * 5
 
@@ -157,10 +156,10 @@ def signum(n):
 
 if __name__ == '__main__':
     rospy.init_node('controller')
-    c = controller()
+    c = Controller()
     sleep(2)
     c.straight(0.18 * 2)
     # c.straight(0.18)
-    c.turn(- pi / 2)
-    c.straight(0.18)
+    # c.turn(- pi / 2)
+    # c.straight(0.18)
     rospy.spin()
