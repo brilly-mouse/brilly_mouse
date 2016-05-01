@@ -12,10 +12,11 @@ class LiveRun():
         if not self.mouse.facingWall() and self.mouse.inBounds(coordTuple[0], coordTuple[1]):
             (self.mouse.x, self.mouse.y) = self.mouse.forwardCoordinates()
             self.controller.straight(0.18)
+            self.wait()
             return wallsAsExpected
         if self.mouse.facingWall():
-            return False
             print "Mouse is facing wall"
+        return False
 
         # move a certain distance and try to make sure that
         # mouse stays in the center
@@ -27,8 +28,17 @@ class LiveRun():
         # MAKE SURE TO UPDATE self.mouse.x and self.mouse.y when moving appropriately
         # return -1
 
+    def wait():
+        count = 0
+        while not self.controller.busy and count < 5:
+            count += 1
+            sleep(0.2)
+        while self.controller.busy:
+            sleep(0.2)
+
     def turnRight(self):
         self.controller.turn(-pi/2)
+        self.wait()
         return 1
         # decrease speed appropriately for turn
         # MAKE SURE TO UPDATE self.mouse.direction
@@ -36,6 +46,7 @@ class LiveRun():
 
     def turnLeft(self):
         self.controller.turn(pi/2)
+        self.wait()
         return 1
         # decrease speed appropriately for turn
         # MAKE SURE TO UPDATE self.mouse.direction

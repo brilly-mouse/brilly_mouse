@@ -19,5 +19,4 @@ mouse = Mouse(x,y,direction,board,1)
 
 
 
-raw_input('press any key to press to start')
 mouse.floodFillToGoal()
