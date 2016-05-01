@@ -1,0 +1,5 @@
+<launch>
+    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch"/>
+    <include file="$(find bb_drive)/launch/drive_velocity.launch"/>
+    <node name="ir_sensors" pkg="brilly_mouse" type="infrared.py" />
+</launch>
