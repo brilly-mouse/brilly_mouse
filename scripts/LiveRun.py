@@ -6,21 +6,18 @@ class LiveRun():
     def __init__(self, mouse):
         self.mouse = mouse
         self.controller = Controller()
-        print("XXXXXXSSADJKLSDJKASJDKLAJSKLDJALKS")
+        print("Preparing to start movement, sleeping for one second..."
         sleep(1)
         self.DIAGONAL_DISTANCE_MAX = 0.1
 
     def move(self):
         coordTuple = self.mouse.forwardCoordinates()
-        wallsAsExpected = all((self.mouse.detectFrontWall(), self.mouse.detectFrontLeftWall(), self.mouse.detectFrontRightWall()))
-        if not wallsAsExpected:
-            return False
         if not self.mouse.facingWall() and self.mouse.inBounds(coordTuple[0], coordTuple[1]):
             (self.mouse.x, self.mouse.y) = self.mouse.forwardCoordinates()
             self.controller.straight(0.18)
-            self.wait()
+            wallsAsExpected = self.straightMoveWaitForDetection()
             return wallsAsExpected
-        if self.mouse.facingWall():
+        elif self.mouse.facingWall():
             print "Mouse is facing wall"
         return False
 
@@ -40,7 +37,7 @@ class LiveRun():
             count += 1
             sleep(0.2)
             if count >= 5:
-                print "hmmmmmmmmmnnnnggghhh"
+                print "Regular wait is taking longer than usual.."
 
         count = 0
         while self.controller.busy:
@@ -49,6 +46,30 @@ class LiveRun():
             if count > 40:
                 print "this is taking longer than expected"
 
+    def straightMoveWaitForDetection(self):
+        count = 0
+        while not self.controller.busy and count < 5:
+            count += 1
+            sleep(0.1)
+            if count >= 5:
+                print "waiting on straight movement to start"
+
+        count = 0
+        foundWall = False
+        wallsAsExpected = True
+        while self.controller.busy:
+            sleep(0.2)
+            count += 1
+
+            if not foundWall and controller.dist_to_goal <= 0.09:
+                print "finished moving straight 9 cm, preparing to use distance sensors" 
+                foundWall = True
+                wallsAsExpected = all((self.mouse.detectFrontWall(), self.mouse.detectFrontLeftWall(), self.mouse.detectFrontRightWall()))
+                self.
+            if count > 40:
+                print "straight move taking longer than usual to complete..."
+
+        return wallsAsExpected
     def turnRight(self):
         self.controller.turn(-pi/2)
         self.wait()

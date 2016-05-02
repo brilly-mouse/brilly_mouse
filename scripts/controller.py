@@ -18,7 +18,12 @@ class Controller(object):
         self.right_wall_pid.setpoint = 0.055
 
         self.goal_angle = None
+
+        # distance to goal from start position
         self.goal_distance = None
+
+        # distance to goal from current position
+        self.dist_to_goal = 0
 
         self.start_position = None
         self.position = None
@@ -72,6 +77,7 @@ class Controller(object):
         if self.goal_distance != None:
             # heading correction
 
+
             if self.left_dist > 0.03 and self.left_dist < 0.08:
                 angular_vel -= self.left_wall_pid.calc(self.left_dist)
 
@@ -79,6 +85,7 @@ class Controller(object):
                 angular_vel += self.right_wall_pid.calc(self.right_dist)
             # vroom
             offset = abs(self.goal_distance) - dist(self.position.x, self.position.y, self.start_position.x, self.start_position.y)
+            self.dist_to_goal = offset
             if abs(offset) < 0.01 and abs(twist.linear.x) < 0.01:
                 self.goal_distance = None
             elif abs(offset) < 0.05:
