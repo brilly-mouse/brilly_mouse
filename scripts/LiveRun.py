@@ -6,7 +6,7 @@ class LiveRun():
     def __init__(self, mouse):
         self.mouse = mouse
         self.controller = Controller()
-        print("Preparing to start movement, sleeping for one second..."
+        print "Preparing to start movement, sleeping for one second..."
         sleep(1)
         self.DIAGONAL_DISTANCE_MAX = 0.1
 
@@ -61,11 +61,10 @@ class LiveRun():
             sleep(0.2)
             count += 1
 
-            if not foundWall and controller.dist_to_goal <= 0.09:
+            if not foundWall and self.controller.dist_to_goal <= 0.09:
                 print "finished moving straight 9 cm, preparing to use distance sensors" 
                 foundWall = True
                 wallsAsExpected = all((self.mouse.detectFrontWall(), self.mouse.detectFrontLeftWall(), self.mouse.detectFrontRightWall()))
-                self.
             if count > 40:
                 print "straight move taking longer than usual to complete..."
 
