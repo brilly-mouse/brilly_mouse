@@ -21,6 +21,7 @@ class Mouse():
         self.y = yi
         self.direction = direction
         self.saved_path = []
+        self.is_first_move = True
         self.pause = pause
         if(realRun):
             self.action = LiveRun(self)
@@ -204,6 +205,11 @@ class Mouse():
     def floodFillToGoal(self):
         print "doing a star search"
         while not self.inGoal() and not rospy.is_shutdown():
+            if self.is_first_move:
+                self.is_first_move = False
+                self.path = [self.forwardCoordinates()]
+            # first move is always forward
+
             self.path = self.AStarSearch()
             self.followPath()
             # will follow path to completion if walls appropriate
